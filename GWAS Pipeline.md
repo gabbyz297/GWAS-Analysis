@@ -1,110 +1,188 @@
-# GWAS Pipeline
 
-[![hackmd-github-sync-badge](https://hackmd.io/wtlDJUFBRWmgodbEftrUxQ/badge)](https://hackmd.io/wtlDJUFBRWmgodbEftrUxQ)
-
+Derived from: (https://github.com/CassinSackett/SNP_capture)
 
 # Upload raw data files
 
-scp -r /local/directory/path/to/files/ user@qb.loni.org:/path/to/folder
+Because of the large file sizes, all data analyses were completed on a high performance computer I could remotely access. `scp` allows files from your computer to be securely copied to a remote computing system
+
+`scp -r /local/directory/path/to/files/ user@qb.loni.org:/path/to/folder`
 
 # Unzip files
 
-gunzip -r /path/to/files/*gz.fq
+All files were zipped when uploaded to save storage space on my personal device but now that the files have been uploaded they can be unzipped using `gunzip`.
 
-# Concatenate files from the same sample 
+`gunzip -r /path/to/files/*gz.fq`
 
-cat samplename_lane_number samplename_lane_number > newsamplename.fq
+# Concatenate files from the same sample run on different lanes (with the same orientation) 
 
-##lane number will be different since reads were run on different lanes but the last number should be the same
+Forward or reverse reads that were run on different lanes were concatenated using `cat`. Forward and reverse reads need to be kept separate, only concatenate reads from the same sample with the same orientation (e.g R1 can be concatenated with another R1 sample but not R2)
+
+`cat samplename_lane_number samplename_lane_number > newsamplename.fq`
+
 
 # Run FastQC on all samples to check quality of reads
 
-{if loading from conda; doesn't need to be repeated below} /path/to/fastqc
+`FastQC` is a program used to check the sequence quality of your reads. This information can be used to determine if sample needs to be resequenced or if bad sequence quality base pairs can be removed. 
 
-for i in /path/to/files/*.fq do /path/to/FastQC/fastqc $i; done
+Run linear (ideal for running on a personal computer)
 
-# FastQC creates fastqc.html files that need to be downloaded to computer to view 
+`for i in /path/to/files/*.fq do /path/to/FastQC/fastqc $i; done`
 
-scp user@qb.loni.org:/path/to/files/*.html /local/directory/
-##scp securely copies files
+Run Parallel (optimal for HPCs)
 
-# Trim reads using Trimmomatic  
+To run in parallel you will need to make a list of your files which includes the full path to their location
 
+```
+module load gnuparallel/20190222/intel-19.0.5
+
+source /path/to/miniconda3/etc/profile.d/conda.sh
+
+conda activate fastqc
+
+/path/to/conda-env/envs/fastqc/bin/fastqc
+
+
+cat /path/to/sample_list.txt | parallel -j 4 'fastqc -t 6 {}.fq'
+```
+
+`FastQC` creates fastqc.html files that need to be downloaded to computer to view. Make sure you are logged out of any HPC before downloading.
+
+`scp user@qb.loni.org:/path/to/files/*.html /local/directory/`
+
+# Trim reads using Trimmomatic
+
+`Trimmomatic` trims reads based on the average quality score within a sliding window. The sliding window parameters are set by using the first number as your desired size of the window and the second number as the minimum quality score to keep the base pairs within that window. You can specify a number of leading or trailing base pairs to trimmed automatically based on `FASTQC` results or you can use the default settings below. 
+
+Run Linear
+
+```
 module load jdk/1.8.0_262/intel-19.0.5
 
 java -jar /path/to/Trimmomatic-0.39/trimmomatic-0.39.jar PE /path/to/forward/file.fq /path/to/reverse/file.fq /path/to/forward/file/file_1P.fq /path/to/forward/file/file_1U.fq /path/to/reverse/file/file_2P.fq /path/to/reverse/file/file_2U.fq LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
+``` 
 
-##-jar executes trimmomatic, PE paired-end reads, Leading removes bases at the beginning of the read that fall below specified quality score, trailing removes bases at the end of the read that fall below specified quality score, slidingwindow trim and cut when the average quality score is below what is specified- first number is the window size and the second number is the required quality score, minlen remove reads that fall below the minimum length specified 
+1P= paired read 1, 1U= unpaired read 1, 2P= paired read 2, 2U= unpaired read 2 
 
-##1P paired read 1, 1U unpaired read 1, 2P paired read 2, 2U unpaired read 2 
 
-# Quality filter reads using FastQ
+Run Parallel
 
-module load fastx_toolkit/0.0.13.2/INTEL-14.0.2
-for i in /path/to/files/*.fq; do fastq_quality_filter -Q33 -q20 -p 98 -i -o{i%.fq}.qual.fq; done
+```
+module load jdk/1.8.0_262/intel-19.0.5
+module load gnuparallel/20190222/intel-19.0.5
 
-##path to the version of fastx toolkit installed on LONI 
-##-Q sequence type, -q minimum quality score to keep, -p minimum percent of bases that have to have -q quality 
-##output creates .qual.fq files (default is STDOUT)
+cat /path/to/sample_list.txt | parallel -j 4 'java -jar /path/to/Trimmomatic-0.39/trimmomatic-0.39.jar PE -threads 4 {}_1.fq {}_2.fq {.}_1P.fq {.}_1U.fq {.}_2P.fq {.}_2U.fq ILLUMINACLIP:/project/gabby297/Trimmomatic-0.39/adaptors/TruSeq3-PE.fa:2:30:10 SLIDINGWINDOW:5:20 MINLEN:50'
+```
+
 
 # Index Reference Genome using BWA Index; Create .fai and .dict files with Samtools and GATK
 
-##Indexing the genome is like a book index, used to make alignment easier later 
+Indexing the genome is like a book index, used to make alignment easier later 
 
 # BWA Index
-module load bwa/0.7.17/intel-19.0.5  
-bwa index -a bwtsw /path/to/reference/reference.fa
 
-##path to the version of BWA installed on LONI 
-##-a algorithm to construct index from, bwtsw algorithm implemented in BWT-SW which is for large genomes, just need -a for small genomes 
+```
+/path/to/bwa index -a bwtsw /path/to/reference/reference.fa
+```
+-a algorithm to construct index from, bwtsw algorithm implemented in BWT-SW which is for large genomes, just need -a for small genomes 
+
 
 # Samtools
+
+```
 module load samtools/1.10/intel-19.0.5
 samtools faidx /path/to/reference/reference.fa
-
-##Samtools path from download via conda
-##Faidx will index input file and create a .fai file
-
+```
 
 # GATK
-module load jdk/1.8.0_262/intel-19.0.5 
-/path/to/gatk-4.1.2.0/gatk --java-options "-Xmx2G" CreateSequenceDictionary -R /path/to/reference/reference.fa
 
-##path to java version installed on LONI 
-##-Xmx2G sets the initial and maximum heap size available to improve performance, CreateSequenceDictionary creates .dict file, -R reference
+`/path/to/gatk-4.1.2.0/gatk --java-options "-Xmx2G" CreateSequenceDictionary -R /path/to/reference/reference.fa`
+
+-Xmx2G sets the initial and maximum heap size available to improve performance
 
 
 # Align reads to reference using BWA mem
 
+Now that the reference genome is indexed we can align our reads to it using `BWA mem`
+
+
+Run Linear 
+
+```
 module load bwa/0.7.17/intel-19.0.5
 
-for i in /path/to/files/*.qual.fq; do bwa mem -a -M -P -t 10 -v 3 \ 
+for i in /path/to/files/*1P.fq; do bwa mem -a -M -t 10 -v 3 \ 
 /path/to/reference/reference.fa \ 
-$i ${i/1P/2P} > ${i%.qual.fq}.sam 2> ${i%.qual.fq}.mem.log; done
-
-##path to the version of BWA installed on LONI
-##bwa mem aligns 70bp-1Mbp sequences, -v verbose level (a value 0 for disabling all the output to stderr; 1 for outputting errors only; 2 for warnings and errors; 3 for all normal messages; 4 or higher for debugging), -M mark shorter split hits as secondary (for Picard compatibility), -P paired-end mode, -a output all found alignments, -t number of threads 
-##output creates .sam and .mem.log files
+$i ${i/1P/2P} > ${i%P.fq}.sam 2> ${i%P.fq}.mem.log; done
+```
+bwa mem aligns 70bp-1Mbp sequences, -v verbose level (a value 0 for disabling all the output to stderr; 1 for outputting errors only; 2 for warnings and errors; 3 for all normal messages; 4 or higher for debugging), -M mark shorter split hits as secondary (for Picard compatibility), -P paired-end mode (only necessary if you have your forward and reverse reads in one interleaved file), -a output all found alignments, -t number of threads
 
 
-# Create BAM files for downstream analyses using Samtools View
+**outputs end in 1P.sam but contains both read 1 and 2**
 
-for i in /path/to/files/*.sam; do samtools view -q 20 -bt /path/to/reference/.fa -o ${i%sam}bam $i; done
 
-##Samtools path from download via conda
-##-q skip alignments with mapping quality less than specified number, -bt output in BAM format
-##output creates bamq20 files
+## Run Parallel 
 
-# Merge forward and reverse reads using Samtools Merge
+```
+module load bwa/0.7.17/intel-19.0.5
 
+module load gnuparallel/20190222/intel-19.0.5
+
+cat /path/to/sample_list.txt | parallel -j 4 'bwa mem -a -M -P -v 3 -t 4 /path/to/reference/reference.fa {}_1P.fq {}_2P.fq  > {.}.sam 2>  {.}.mem.log'
+```
+
+
+# Create BAM files using Samtools View
+
+Next we will convert our SAM files into binary BAM files to speed up downstream analyses and save storage space.
+
+Run Linear
+
+```
 module load samtools/1.10/intel-19.0.5
 
-samtools merge /path/to/output/output.bam /path/to/file/file_1P.bam /path/to/file/file_2P.bam -@4;
+for i in /path/to/files/*.sam; do samtools view -q 20 -bt /path/to/reference/.fa -o ${i%sam}bam $i; done
+```
 
-##-@ number of input/output compression threads to use in addition to main thread 
+-q skip alignments with mapping quality less than specified number, -bt output in BAM format
 
-# Assign all reads to read-group for GATK using Picard tools
+Run Parallel 
 
+```
+module load samtools/1.10/intel-19.0.5
+
+module load gnuparallel/20190222/intel-19.0.5
+
+cat /path/to/sample_list.txt | parallel -j 4 'samtools view -threads=4 -q 20 -bt /path/to/reference/data/reference.fa {}.sam  > {.}.bam'
+```
+
+# Check Alignment Statistics with Samtools
+
+BWA mem doesn't ouput it's own alignment stats so I've added this step as a checkpoint before filtering and genotyping.
+
+
+Run linear 
+
+```
+module load samtools/1.10/intel-19.0.5
+
+for i in /path/to/files/*.bam; do samtools flagstat -o ${i%bam}bam_stat $i; done
+```
+
+Run parallel
+```
+module load samtools/1.10/intel-19.0.5
+
+module load gnuparallel/20190222/intel-19.0.5
+
+cat /path/to/sample_list.txt | parallel -j 4 'samtools flagstat -@ 4 {}.bam  > {.}.bam_stat'
+```
+
+
+# Assign all reads to sorted read-groups using Picard tools
+
+Next we will assign our reads to read-groups based on which lane of the sequencer they were run on. This is done to minimize the impact of sequencer effects on results.
+
+```
 cd $PBS_O_WORKDIR
 mkdir -p tmp
 
@@ -116,82 +194,86 @@ do
         AddOrReplaceReadGroups -I $i -O ${i%.bam}.tag.bam -MAX_RECORDS_IN_RAM 1000000 -TMP_DIR $PWD/tmp \
         -SO coordinate -ID ${i%.bam} -LB 1 -PL illumina -PU 1 -SM ${i%.bam};
 done
+```
 
-##path to java version installed on LONI
-##-Dpicard.useLegacyParser=false for GATK 4.0 to run Picard tools from GATK, -Xmx2G sets the initial and maximum heap size available to improve performance,AddOrReplaceReadGroups assigns reads to read group, -I input file, -O output file, -MAX_RECORDS_IN_RAM specifies the number of records stored in RAM before storing in disk, TMP_DIR $PWD/tmp creates a temorary directory called tmp, -SO sort order to ouput in (options:unsorted,queryname,coordinate,duplicate,unknown), -ID read-group id, -LB read group library, -PL read group platform, -PU read group platform unit, -SM read group sample name
-##creates .tag.bam files
+-Dpicard.useLegacyParser=false for GATK 4.0 to run Picard tools from GATK, -Xmx2G sets the initial and maximum heap size available to improve performance,AddOrReplaceReadGroups assigns reads to read group, -I input file, -O output file, -MAX_RECORDS_IN_RAM specifies the number of records stored in RAM before storing in disk, TMP_DIR $PWD/tmp creates a temorary directory called tmp, -SO sort order to ouput in, -ID read-group id, -LB read group library, -PL read group platform, -PU read group platform unit, -SM read group sample name
 
 
-# Mark PCR duplicates using Picard tools
+**I had issues with picard tools for some reason, I kept getting a non-zero exit status (126) meaning command was found but not executable (application does not have permission from bash shell to run). Fixed by running chmod +x file.sh**
 
+
+
+# Mark and remove PCR duplicates using Picard tools
+
+```
 module load  jdk/1.8.0_262/intel-19.0.5
 cd $PBS_O_WORKDIR
-mkdir -p tmp
+mkdir -p temp
 
-for i in /path/to/files/.tag.bam; 
+for i in /path/to/files/*.tag.bam; 
 do
         java -Xmx4g -jar /path/to/picard/picard.jar \
-        MarkDuplicates INPUT=$i OUTPUT=${i%.tag.bam}.rmdup.bam MAX_FILE_HANDLES_FOR_READ_ENDS_MAP=6000 MAX_RECORDS_IN_RAM=1000000 TMP_DIR=$PWD/tmp \
-        METRICS_FILE=${i%.tag.bam}.rmdup.metrics ASSUME_SORTED=true;
+        MarkDuplicates -INPUT $i -OUTPUT ${i%.tag.bam}.rmdup.bam -MAX_FILE_HANDLES_FOR_READ_ENDS_MAP 6000 -MAX_RECORDS_IN_RAM 1000000 -TMP_DIR $PWD/temp \
+        -METRICS_FILE ${i%.tag.bam}.rmdup.metrics -ASSUME_SORTED true;
 done
+```
 
-##path to java version installed on LONI
-##cd change directory, mkdir -d make directory and if neccessary, all parent directories, -Xmx2G sets the initial and maximum heap size available to improve performance, MarkDuplicates identifies duplicate reads, MAX_FILE_HANDLES_FOR_READ_ENDS_MAP maximum number of file handles to keep open when spilling read ends to disk (default is 8000), MAX_RECORDS_IN_RAM when writing files that need to be sorted this will specify the number of records stored in RAM before spilling to disk, TMP_DIR $PWD/tmp creates a temorary directory called tmp, METRICS_FILE File to write duplication metrics to, ASSUME_SORTED If true, assume that the input file is coordinate sorted 
-##creates .rmdup.bam
+cd change directory, mkdir -d make directory and if neccessary, all parent directories, -Xmx2G sets the initial and maximum heap size available to improve performance, MarkDuplicates identifies duplicate reads, MAX_FILE_HANDLES_FOR_READ_ENDS_MAP maximum number of file handles to keep open when spilling read ends to disk (default is 8000), MAX_RECORDS_IN_RAM when writing files that need to be sorted this will specify the number of records stored in RAM before spilling to disk, TMP_DIR $PWD/tmp creates a temorary directory called tmp, METRICS_FILE File to write duplication metrics to, ASSUME_SORTED If true, assume that the input file is coordinate sorted 
+
+
+**I had issues with picard tools for some reason, I kept getting a non-zero exit status (126) meaning command was found but not executable (application does not have permission from bash shell to run). Fixed by running chmod +x file.sh, updating syntax, and running using conda**
 
 
 # Index filtered files using Samtools
 
+Next filtered files will be indexed for realignment with `samtools`
+
+```
 module load samtools/1.10/intel-19.0.5
 
 for i in /path/to/files/*.rmdup.bam; do samtools index $i; done
-
-##Samtools index indexes files for realignment 
+```
 
 
 # Create GVCF files using GATK
 
-module load jdk/1.8.0_262/intel-19.0.5
+Next we will convert our filtered BAM files to GVCF files which will create VCF formatted files without genotypes
 
-/path/to/gatk-4.1.2.0/gatk --java-options "-Xmx4g" HaplotypeCaller --ERC GVCF -R /path/to/reference/.fa  -I /path/to/file/file.rmdup.bam -O /path/to/file/file.g.vcf --min-base-quality-score 20
+Run Linear
 
-##path to java version installed on LONI
-##-Xmx2G sets the initial and maximum heap size available to improve performance, HaplotypeCaller --ERC GVCF creates file with raw unfiltered SNP and indel calls to genotype, --min-base-quality-score minimum quality required to consider a base for calling
+`path/to/gatk-4.1.2.0/gatk --java-options "-Xmx60g" HaplotypeCaller --ERC GVCF -R /path/to/reference/.fa  -I /path/to/file/file.rmdup.bam -O /path/to/file/file.g.vcf --min-base-quality-score 20`
+
+-Xmx2G sets the initial and maximum heap size available to improve performance, HaplotypeCaller --ERC GVCF creates GVCF, --min-base-quality-score minimum quality required to consider a base for calling
 
 
-# Combine GVCF files using GATK
+# Combine GVCF files using GATK Combine GVCF
 
-module load jdk/1.8.0_262/intel-19.0.5
+We can combine samples into a single GVCF file for genotyping.
 
-/path/to/gatk-4.1.2.0/gatk CombineGVCFs -R /path/to/reference/.fa  -V /path/to/file1/file1.g.vcf -V /path/to/file2/file2.g.vcf -O /path/to/file/combined.g.vcf 
-
-##path to java version installed on LONI
-##CombineGVCFs merge GVCF files into a single GVCF files, -R reference file, -V variant, -O output file
+`path/to/gatk-4.1.2.0/gatk CombineGVCFs -R /path/to/reference/.fa  -V /path/to/file1/file1.g.vcf -V /path/to/file2/file2.g.vcf -O /path/to/file/combined.g.vcf `
 
 
 # Genotype GVCF file
 
-module load jdk/1.8.0_262/intel-19.0.5
+Now that we have a single GVCF file we can genotype it.
 
-/path/to/gatk-4.1.2.0/gatk --java-options "-Xmx4g" GenotypeGVCFs -R /path/to/reference/.fa  -V /path/to/file/combined.g.vcf -O /path/to/file/combined.vcf 
+`path/to/gatk-4.1.2.0/gatk --java-options "-Xmx60g" GenotypeGVCFs -R /path/to/reference/.fa  -V /path/to/file/combined.g.vcf -O /path/to/file/combined.vcf `
 
-##path to java version installed on LONI
-##-Xmx2G sets the initial and maximum heap size available to improve performance, GenotypeGVCFs performs joint genotyping of all samples within file, -R reference file, -V variant, -O output file
  
-# Select SNP and MNP variants using GATK
+# Select SNP variants using GATK
 
-module load jdk/1.8.0_262/intel-19.0.5
+Now that we have a genotyped VCF file we can select variant types that we're interested in. 
 
-/path/to/gatk-4.1.2.0/gatk SelectVariants --variant /path/to/file/combined.vcf -R /path/to/reference/.fa --output /path/to/file/file2.vcf --select-type-to-include SNP --select-type-to-include MNP --exclude-non-variants true --set-filtered-gt-to-nocall true 
+`/path/to/gatk-4.1.2.0/gatk SelectVariants --variant /path/to/file/combined.vcf -R /path/to/reference/.fa --output /path/to/file/file2.vcf --select-type-to-include SNP --exclude-non-variants true --set-filtered-gt-to-nocall true `
 
-##path to java version installed on LONI
-##SelectVariants selects a subset of variants from VCF file, --variant VCF file with variants, -R reference file, --output output file --select-type-to-include options: INDEL, SNP, MIXED, MNP, SYMBOLIC, NO_VARIATION
+ --select-type-to-include options: INDEL, SNP, MIXED, MNP, SYMBOLIC, NO_VARIATION
 
 
 # Quality filter variants and flag variants that don't meet criteria using GATK
 
-module load jdk/1.8.0_262/intel-19.0.5
+Next we can filter our genotyped VCF file for analyses.
 
+```
 /path/to/gatk-4.1.2.0/gatk VariantFiltration --variant /path/to/file/file2.vcf --output /path/to/file/file3.vcf -R /path/to/reference/.fa \
 --filter-name "ReadPosRankSum_filter" \
 --filter-expression "ReadPosRankSum < -8.0" \
@@ -203,110 +285,116 @@ module load jdk/1.8.0_262/intel-19.0.5
 --filter-expression "QD < 2.0" \
 --genotype-filter-name "DP8filter" \
 --genotype-filter-expression "DP < 8" 2>/dev/null 
+```
 
-##path to java version installed on LONI
-##VariantFiltration filter varant calls, --variant VCF file with variants, --output output file, -R reference file, ReadPosRankSum compares whether positions of reference and alternate alleles are different within reads, MQRankSum compares mapping qualities of reads supporting the reference allele and alternate allele, FS Phred-scaled probability that there is strand bias at the site. FS value will be close to 0 when there is little to no strand bias at the site, QD is the variant confidence divided by the unfiltered depth of samples. This normalizes the variant quality in order to avoid inflation caused when there is deep coverage, DP is genotype depth of coverage
-
-##I didn't know this until after I ran this code but: For filtering purposes it is better to use QD than either QUAL or DP directly (maybe the DP filter should be removed?)
+ReadPosRankSum compares whether positions of reference and alternate alleles are different within reads, MQRankSum compares mapping qualities of reads supporting the reference allele and alternate allele, FS Phred-scaled probability that there is strand bias at the site. FS value will be close to 0 when there is little to no strand bias at the site, QD is the variant confidence divided by the unfiltered depth of samples. This normalizes the variant quality in order to avoid inflation caused when there is deep coverage, DP is genotype depth of coverage
 
 
 # Remove flagged variants using GATK
 
+This will remove variants that did not meet the filters specified above.
+
+```
 module load jdk/1.8.0_262/intel-19.0.5
 
 /path/to/gatk-4.1.2.0/gatk SelectVariants -R /path/to/reference/.fa --variant /path/to/file/file3.vcf --output /path/to/file/file4.vcf --set-filtered-gt-to-nocall true
-
-##path to java version installed on LONI
-##SelectVariants selects a subset of variants from VCF file, -R reference file,--variant VCF file with variants,--output output file   
+```
 
 
 # View general stats of VCF file using VCFtools
 
+`Vcftools` can output a variety of stats including number of SNPS, number of heterozygous sites, number of homozygous sites etc.
+
+```
 export PERL5LIB=/path/to/vcftools/src/perl
 /path/to/vcftools/bin/vcf-stats /path/to/file/.vcf  > output.txt
+```
 
-##PERL5LIB allows you to use perl through vcftools
+PERL5LIB allows you to use perl through vcftools
 
 
-# Remove poor sequences 
+# Remove poor sequences with VCFtools
 
+The first part of this code outputs a file which has 5 columns: N_MISS= number of sites the individual does not have data for, F_MISS= frequency of missing data for the individual
+
+```
 export PERL5LIB=/path/to/vcftools/src/perl
 /path/to/vcftools/bin/vcftools --vcf /path/to/file/file.vcf --missing-indv --out /path/to/file/file
+```
 
-##--vcf VCF file, --missing-indv creates an .imiss file which has 5 columns: N_MISS= number of sites the individual does not have data for, F_MISS= frequency of missing data for the individual, create a text file with individuals to remove based on missing data, --out output file 
+This ouput can be used to create a text file of individuals to remove based on missing data. This file will be used in the code below. This step can be skipped if no individuals have a high percentage of missing data.
 
+```
 export PERL5LIB=/path/to/vcftools/src/perl
 /path/to/vcftools/bin/vcftools --vcf /path/to/file/file.vcf --remove file.txt --out /path/to/file.vcf
+```
 
-##--vcf VCF file, --remove text file with individuals to remove, --out output file
 
-# Create chromosome mapping file for VCF to PLINK conversion 
+# Create chromosome mapping file using bcftools view for VCF to PLINK conversion (only for vcftools)
 
-##List all the chromosomes or contigs in your VCF file, one chromosome or contig per line. I had to edit my VCF file because it didn't like the characters and underscores in the names of my contigs
+List all the chromosomes or contigs in your VCF file, one chromosome or contig per line for PLINK. 
 
-I used: 
-sed 's/part_to_remove//g' 
-to remove the part of the contig name that PLINK didn't like (saved as a new vcf file), then copied the new names into my chromosome mapping file 
+`/path/to/bin/bcftools view -H file.vcf | cut -f 1 | uniq | awk '{print $0"\t"$0}' > /path/to/output/chrom-map.txt`
 
-e.g
 
-000001
-000002
-000003
-000004
+# Convert VCF to PLINK (.ped + .map) file for analyses (vcftools)
 
-# Convert VCF to PLINK file for analyses
+This will create files compatible with PLINK 1.9
 
+```
 export PERL5LIB=/path/to/vcftools/src/perl
 /path/to/vcftools/bin/vcftools --vcf /path/to/file/file.vcf --chrom-map  /path/to/file/file.txt --out /path/to/file/output  --plink
+```
 
-##--vcf VCF file, --chrom-map chromosome mapping file, --out output file, --plink convert to plink file
+# Convert PLINK (.ped + .map) file to PLINK2 (.pgen + .psam + .pvar) (plink)
+
+This will create files compatible with PLINK 2.0
+
+`/path/to/plink2 --pedmap /path/to/prefix_of_ped_and_map/file --allow-extra-chr --out output_prefix`
 
 # Create phenotype file for PLINK association test
 
-##Text file format uses FULL NAME from VCF file. My VCF file named all my individuals the full path (pretty sure that's the default) to the file so, double check what your individual names are in the VCF file you will be using for your association test.
+We need to create a phenotype files so PLINK knows how to group our samples for our GWAS. The text file format uses FULL NAME from VCF file. My VCF file named all my individuals the full path (pretty sure that's the default) to the file so, double check what your individual names are in the VCF file you will be using for your association test.
 
-##3 column format with Family ID (FID), Individual ID (IID) and phenotype [1= unaffected (or can be control), 2= affected (or can be case), 0= missing data], tab delimited columns 
+The phenotype files has a 3 column format with Family ID (FID), Individual ID (IID) and phenotype [1= unaffected (or can be control), 2= affected (or can be case), 0= missing data], tab delimited columns. If there is no Family ID you can copy the Individual ID into that column or remove it completely (I haven't tried that though).
 
-##If there is no Family ID you can copy the Individual ID into that column or remove it completely (I haven't tried that though)
+`path/to/file    path/to/file    1,2 or 0`
 
-path/to/file    path/to/file    1,2 or 0
 
-# Run association test in PLINK 
 
-source /path/to/miniconda3/etc/profile.d/conda.sh
-conda activate plink-1.90
-
-/path/to/miniconda3/bin/plink --file /path/to/file/file.plink --allow-extra-chr --allow-no-sex --pheno /path/to/file/file.txt --assoc --out /path/to/output
-
---file plink file, --allow-extra-chr allow extra chromosomes [permit unrecognized chromosome codes, treating their variants as unplaced], --allow-no-sex Do not force ambiguous-sex phenotypes to missing, --pheno phenotype file, --assoc basic association test, --out output  
-
-# Sort association by p-value
-
-sort -k 9,9 file.assoc > new_file
-
-##p-values are in the 9th column 
-
-# Convert PLINK files to .bed 
-
-source /path/to/miniconda3/etc/profile.d/conda.sh
-conda activate plink-1.90
-
-/home/gabby297/miniconda3/bin/plink --file /path/to/file/file --allow-extra-chr --allow-no-sex --pheno /path/to/file/file.txt --chr-set 40 no-xy --make-bed --out output
-
---file plink file, --allow-extra-chr allow extra chromosomes [permit unrecognized chromosome codes, treating their variants as unplaced], --allow-no-sex Do not force ambiguous-sex phenotypes to missing, --pheno phenotype file, --chr-set 40 changes the chromosome set. The first parameter specifies the number of diploid autosome pairs if positive or haploid chromosomes if negative. Given diploid autosomes the remaining modifiers let you indicate the absence of specific non-autosomal chromosomes. When there are n autosome pairs the X chromosome is assigned numeric code n+1, Y is n+2, XY (pseudo-autosomal region of X) is n+3, and MT (mitochondria) is n+4,  --make-bed generate .bed binary file, --out output
- 
 # Run PCA in PLINK 
 
-source /path/to/miniconda3/etc/profile.d/conda.sh
-conda activate plink-1.90
+We can run a PCA to make sure that the results of our GWAS are not due to any population structuring
 
-/path/to/miniconda3/bin/plink --bfile /path/to/file.bed --allow-extra-chr --allow-no-sex --pheno /path/to/file.txt --chr-set 40 no-xy --pca --out output
+`/path/to/plink2 --pfile /path/to/prefix/file --allow-extra-chr --pheno /path/to/phenotype/file.txt --read-freq /path/to/file.acount --pca --out output`
 
---bfile bed file, --allow-extra-chr allow extra chromosomes [permit unrecognized chromosome codes, treating their variants as unplaced], --allow-no-sex Do not force ambiguous-sex phenotypes to missing, --pheno phenotype file, --chr-set 40 changes the chromosome set. The first parameter specifies the number of diploid autosome pairs if positive or haploid chromosomes if negative. Given diploid autosomes the remaining modifiers let you indicate the absence of specific non-autosomal chromosomes. When there are n autosome pairs the X chromosome is assigned numeric code n+1, Y is n+2, XY (pseudo-autosomal region of X) is n+3, and MT (mitochondria) is n+4,  --pca extract principal components, --out output
+ --allow-extra-chr allow extra chromosomes [permit unrecognized chromosome codes, treating their variants as unplaced]
+
+
+# Run association test in PLINK 1.9 (for less than 50 samples)
+
+
+`/path/to/plink --file /path/to/file/file.ped --allow-extra-chr --allow-no-sex --pheno /path/to/phenotype/file.txt --assoc fischer --adjust --out /path/to/output`
+
+ --allow-extra-chr allow extra chromosomes [permit unrecognized chromosome codes, treating their variants as unplaced], --allow-no-sex Do not force ambiguous-sex phenotypes to missing.
+  
+  
+ # Additional Analyses 
+ 
+ 
+ # Calculate Tajima's D with Vcftools 
+ 
+```
+ export PERL5LIB=/path/to/vcftools/src/perl
+/path/to/vcftools/bin/vcftools --vcf /path/to/file.vcf --out /path/to/file --TajimaD 10000
+```
+
+ --TajimaD specify sliding window size for Tajima's D to be calculated
+
 
 # Visualizing GWAS in R
 
+```
 library("ggplot2")
 
 gwas <- read.table("file.assoc",header=T)
@@ -321,9 +409,11 @@ ggplot(gwas, aes(x= CHR,y= P))+
 plot(gwas.HAAM, x= CHR, y= P, -log10(x))
 
 ##CHR= chromosome and P= p-value
+```
 
 # Visualizing PCA in R 
 
+```
 pca <-read.table("file.eigenvec",sep=" ",header=F)
 
 plot(data=pca, column_3~column_4)
