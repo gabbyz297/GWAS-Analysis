@@ -5,12 +5,12 @@ Derived from: (https://github.com/CassinSackett/SNP_capture)
 Concatenate files from the same sample run on different lanes (with the same orientation) 
 Forward or reverse reads that were run on different lanes were concatenated using `cat`. Forward and reverse reads need to be kept separate, only concatenate reads from the same sample with the same orientation (e.g R1 can be concatenated with another R1 sample but not R2)
 
-`cat samplename_lane_number samplename_lane_number > newsamplename.fq`
+cat samplename_lane_number samplename_lane_number > newsamplename.fq
 
 Run FastQC on all samples to check quality of reads
 `FastQC` is a program used to check the sequence quality of your reads. This information can be used to determine if sample needs to be resequenced or if bad sequence quality base pairs can be removed.
 
-`for i in /path/to/files/*.fq do /path/to/FastQC/fastqc $i; done`
+for i in /path/to/files/*.fq do /path/to/FastQC/fastqc $i; done
 
 Trim reads using Trimmomatic
 `Trimmomatic` trims reads based on the average quality score within a sliding window. The sliding window parameters are set by using the first number as your desired size of the window and the second number as the minimum quality score to keep the base pairs within that window. You can specify a number of leading or trailing base pairs to trimmed automatically based on `FASTQC` results or you can use the default settings below. 
