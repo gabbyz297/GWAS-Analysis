@@ -391,36 +391,73 @@ We can run a PCA to make sure that the results of our GWAS are not due to any po
 
  --TajimaD specify sliding window size for Tajima's D to be calculated
 
+# Calculate Fst with Vcftools
 
-# Visualizing GWAS in R
+Fst can be calculated between two populations with `vcftools` by creating two text files with the names of the samples from each group as they appear in the vcf file.
 
 ```
-library("ggplot2")
+ export PERL5LIB=/path/to/vcftools/src/perl
+/path/to/vcftools/bin/vcftools --vcf /path/to/file.vcf --weir-fst-pop population_1.txt --weir-fst-pop population_2.txt --out /path/to/file
+```
 
-gwas <- read.table("file.assoc",header=T)
+# Calcuate Z-Score in R
 
-gwas <- na.omit(gwas)
+Get Z-scores for Fst Values in R. I used Z-scores to determine significance of my Fst values by subsetting by the top 0.1%. 
 
-ggplot(gwas, aes(x= CHR,y= P))+
-  xlab("Contig") + ylab("P") + geom_point() + scale_x_log10()
-  
-##or
+```
+#READ DATA
+data.fst = read.table(file = "data.weir.fst.txt",
+           header = T, sep = "\t")
 
-plot(gwas.HAAM, x= CHR, y= P, -log10(x))
+#REMOVE NAs
+data_noNA.fst = data.fst[!grepl("NaN", data.fst$WEIR_AND_COCKERHAM_FST),]
 
-##CHR= chromosome and P= p-value
+#CALCULATE Z-SCORE
+data_zscore <- (data_noNA.fst$WEIR_AND_COCKERHAM_FST-mean(data_noNA.fst$WEIR_AND_COCKERHAM_FST))/sd(data_noNA.fst$WEIR_AND_COCKERHAM_FST)
+
+CHANGE OUTPUT TO DATASET
+data_zscore <- as.data.frame(data_zscore)
+
+#ADD Z-SCORE TO FST FILE
+data_noNA.fst$Z_Score = (data_zscore)
+
+#EXPORT FILE
+colnames(data_noNA.fst)[4] <- "Z_Score"
+
+
+write.table(data_noNA.fst,"DATA_FST_ZSCORE.txt", sep="\t", row.names=FALSE)
+
+```
+
+# Calculate Linkage Disequilibrium with Vcftools
+
+```
+ export PERL5LIB=/path/to/vcftools/src/perl
+/path/to/vcftools/bin/vcftools --vcf /path/to/file.vcf --out /path/to/file --geno-r2 --ld-window-bp 50000
 ```
 
 # Visualizing PCA in R 
 
 ```
+
+#READ IN DATA
 pca <-read.table("file.eigenvec",sep=" ",header=F)
 
-plot(data=pca, column_3~column_4)
-
+#ADD COLUMN
 pca$Phenotype <- c(I created a new column listing out the phenotypes correlated with the number codes [0,1,2])
 
+#PLOT
 library("ggplot2")
 
-ggplot(pca, aes(x= column_3,y= column_4, color= Phenotype))  +
-  xlab("PC1") + ylab("PC2") + geom_point(shape=1, size= 3)
+ggplot(pca, aes(x= column_3,y= column_4, color=`Phenotype`))  +
+  xlab("PC 1") + ylab("PC 2") + geom_point(size=8, show.legend = FALSE) +
+  scale_color_manual(breaks = c("Immune", "Susceptible"),
+                     values=c("darkgreen", "red")) +
+   theme(text = element_text(size = 30)) + 
+  theme(axis.text.y = element_text(angle = 45)) +
+  theme(panel.grid.major = element_blank()) +
+  theme(panel.grid.minor = element_line(color = 2,
+                                          size = 0.25,
+                                          linetype = 1))
+```
+
