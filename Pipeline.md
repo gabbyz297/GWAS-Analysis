@@ -5,7 +5,7 @@ _See the code this pipeline is derived from [here](https://github.com/CassinSack
 
 `for i in /path/to/files/*.fq do /path/to/FastQC/fastqc $i; done`
 
-_To see how to run this code in parallel click [here](fastqc.sh)
+_To see how to run this code in parallel click [here](https://github.com/gabbyz297/STRUCTURE-Analysis/blob/main/fastqc.sh)_
 
 ## Trim reads using Trimmomatic :scissors:
 `Trimmomatic` trims reads based on the average quality score within a sliding window. The sliding window parameters are set by using the first number as your desired size of the window and the second number as the minimum quality score to keep the base pairs within that window. You can specify a number of leading or trailing base pairs to trimmed automatically based on `FASTQC` results or you can use the default settings below. 
