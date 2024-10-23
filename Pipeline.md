@@ -38,7 +38,7 @@ _`-Xmx2G` sets the initial and maximum heap size available to improve performanc
 ## Align reads to reference using BWA mem :left_right_arrow:
 Now that the reference genome is indexed we can align our reads to it using `BWA mem`
 
-_bwa mem aligns 70bp-1Mbp sequences, -v verbose level (a value 0 for disabling all the output to stderr; 1 for outputting errors only; 2 for warnings and errors; 3 for all normal messages; 4 or higher for debugging), -M mark shorter split hits as secondary (for Picard compatibility), -P paired-end mode (only necessary if you have your forward and reverse reads in one interleaved file), -a output all found alignments, -t number of threads_
+_`bwa mem` aligns 70bp-1Mbp sequences, `-v` verbose level (a value 0 for disabling all the output to stderr; 1 for outputting errors only; 2 for warnings and errors; 3 for all normal messages; 4 or higher for debugging), `-M` mark shorter split hits as secondary (for Picard compatibility), `-P` paired-end mode (only necessary if you have your forward and reverse reads in one interleaved file), `-a` output all found alignments, `-t` number of threads_
 
 **outputs end in 1P.sam but contains both read 1 and 2**
 
