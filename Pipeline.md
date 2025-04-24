@@ -230,6 +230,15 @@ Fst can be calculated between two populations with `vcftools` by creating two te
 `export PERL5LIB=/path/to/vcftools/src/perl
 /path/to/vcftools/bin/vcftools --vcf /path/to/file.vcf --weir-fst-pop population_1.txt --weir-fst-pop population_2.txt --out /path/to/file`
 
+Calcuate Z-scores for Fst values in R
+
+`fst_values <- read.table("fst_output.weir.fst", header=TRUE)`
+`mean_fst <- mean(fst_values)`
+`sd_fst <- sd(fst_values)`
+
+`fst_values$z_score <- (fst_values$WEIR_AND_COCKERHAM_FST - mean_fst) / sd_fst`
+
+
 ### Calculate Linkage Disequilibrium with Vcftools
 
 `export PERL5LIB=/path/to/vcftools/src/perl
