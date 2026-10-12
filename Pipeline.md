@@ -212,6 +212,31 @@ We can include our top PCs in our association test as a covariate using `--covar
 
 `/path/to/plink2 --pfile /path/to/prefix/file --allow-extra-chr --pheno /path/to/phenotype/file.txt --read-freq /path/to/file.afreq --glm --covar /path/to/file.eigvec  --parameters 1-4 --out /path/to/prefix/file`
 
+# Create phenotype file to run gemma
+
+Gemma's phenotype file format is different from PLINK's so we have to make a new one. For GEMMA you don't need to list your sample names but you will need to create a list of 0's (cases) and 1's (controls) in the order that your samples appear in your PLINK (should also be the same in vcf) file.
+
+ex:
+1
+0
+0
+0
+1
+1
+
+# Create relatedness matrix to run gemma
+
+Gemma can account for population structure by creating its own relatedness matrix with this code or by inputing an eigenvalue file with `-d` or an eigenvector value with `-u`. We can use our PLINK binary file (.ped) as our input.
+
+`gemma -bfile /path/to/ped/prefix -p /path/to/phenotype/file.txt -gk -o ./file_prexix`
+
+GEMMA outputs a directory called "output" so do not write a path for your output file, it will confuse GEMMA and you'll get an error writing output message. 
+
+# Run association test in GEMMA
+
+GEMMA runs a linear mixed model with 4 different test options (-1 Wald test, -2 liklihood ratio test, -3 score test, -4 all 3). The output file will be written to the directory GEMMA created so do not write a full path for the output file again. 
+
+`gemma -bfile /path/to/ped/prefix  -p /path/to/phenotype/file.txt -k /path/to/relatedness/matrix/file.cXX.txt -lmm 4  -o ./file_prefix`
 
 ## Additional Analyses 📊
 
